@@ -330,8 +330,7 @@ def simple(ctx, filter, timeout, workspace, program):
 @click.pass_context
 @click.option('--timeout', '-t', default=3000, help="Wait time for a window to appear (and match) in milliseconds.")
 @click.option('--configs', '-c', default='-', type=click.File('r'), help="A list of startup programs in json")
-@click.argument('program', nargs=-1)
-def config(ctx, timeout, configs, program):
+def config(ctx, timeout, configs):
     """
     Start a program and move it's created window to the desired i3 workspace.
 
@@ -341,7 +340,6 @@ def config(ctx, timeout, configs, program):
         1    when no window has been found.
     """
     debug = ctx.obj['DEBUG']
-    program = ' '.join(program)
     configs = yaml.load(configs, Loader=SafeLoader)
 
     ipc = i3ipc.Connection()
@@ -349,7 +347,10 @@ def config(ctx, timeout, configs, program):
 
     for cfg in configs:
         cfg['filter'] = parse(cfg['filter'])
-        ipc.command(f'exec {cfg["program"]}')
+        p = cfg['program']
+        if isinstance(p, list):
+            p = ' '.join(p)
+        ipc.command(f'exec {p}')
     started_at = time.monotonic_ns() // (1000*1000)
     ipc.main(timeout=timeout / 1000)
     total_time = time.monotonic_ns() // (1000*1000) - started_at 
