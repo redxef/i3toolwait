@@ -2,6 +2,11 @@
 
 Launch a program and move it to the correct workspace.
 
+## Installing
+
+Install all dependencies `python3 -mpip install --upgrade -r requirements.txt`
+and copy the script to your path: `cp i3toolwait /usr/local/bin/i3toolwait`.
+
 ## Filtering
 
 The program allows to match the window or container based on the returned IPC data.
