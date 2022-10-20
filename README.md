@@ -2,6 +2,26 @@
 
 Launch a program and move it to the correct workspace.
 
+## Usage
+
+- **simple:** `i3toolwait simple ...`
+- **config:** `i3toolwait config ...`
+
+### Simple
+
+Run only one program.
+
+### Config
+
+Run multiple programs by specifying a yaml list of the form:
+
+```yaml
+---
+- filter: <your filter>
+  workspace: <target workspace>
+  program: <program to execute>
+```
+
 ## Installing
 
 Use the makefile: `INSTALL_BASE=/usr/local/ make install` or install all dependencies

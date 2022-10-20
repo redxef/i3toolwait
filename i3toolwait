@@ -6,8 +6,14 @@ import functools
 import json
 import time
 
+import yaml
 import click
 import i3ipc
+
+try:
+    from yaml import CSafeLoader as SafeLoader
+except ImportError:
+    from yaml import SafeLoader
 
 class Expression:
     def __init__(self):
@@ -263,25 +269,37 @@ def parse(s: str) -> Expression:
     return build_expression(tokens)
 
 
-def window_new(filter, *, workspace, debug):
+def window_new(configs, debug):
     def callback(ipc, e):
         assert e.change == 'new'
         if debug:
             print(json.dumps(e.ipc_data))
-        if filter.reduce(e.ipc_data):
-            container_id = e.ipc_data['container']['id']
-            ipc.command(f'for_window [con_id="{container_id}"] move container to workspace {workspace}')
-            ipc.main_quit()
+        for i, cfg in enumerate(configs):
+            filter = cfg['filter']
+            workspace = cfg['workspace']
+            if filter.reduce(e.ipc_data):
+                container_id = e.ipc_data['container']['id']
+                ipc.command(f'for_window [con_id="{container_id}"] focus')
+                ipc.command(f'for_window [con_id="{container_id}"] move container to workspace {workspace}')
+                configs.pop(i)
+            if not configs:
+                ipc.main_quit()
     return callback
 
-@click.command()
+@click.group()
+@click.pass_context
+@click.option('--debug', '-d', default=False, is_flag=True, help="Enable debug mode, will log ipc dictionary.")
+def main(ctx, debug):
+    ctx.ensure_object(dict)
+    ctx.obj['DEBUG'] = debug
+
+@main.command()
 @click.pass_context
 @click.option('--filter', '-f', default='True', help="A filter expression for the raw ipc dictionary.")
-@click.option('--debug', '-d', default=False, is_flag=True, help="Enable debug mode, will log ipc dictionary.")
 @click.option('--timeout', '-t', default=3000, help="Wait time for a window to appear (and match) in milliseconds.")
 @click.option('--workspace', '-w', required=True, help="The workspace to move to.")
 @click.argument('program', nargs=-1)
-def main(ctx, filter, debug, timeout, workspace, program):
+def simple(ctx, filter, timeout, workspace, program):
     """
     Start a program and move it's created window to the desired i3 workspace.
 
@@ -290,17 +308,52 @@ def main(ctx, filter, debug, timeout, workspace, program):
         0    on success,
         1    when no window has been found.
     """
+    debug = ctx.obj['DEBUG']
     filter = parse(filter)
     program = ' '.join(program)
 
+    configs=[
+        {
+            "filter": filter,
+            "workspace": workspace,
+        },
+    ]
     ipc = i3ipc.Connection()
-    ipc.on('window::new', window_new(filter, workspace=workspace, debug=debug))
+    ipc.on('window::new', window_new(configs, debug=debug))
     ipc.command(f'exec {program}')
     started_at = time.monotonic_ns() // (1000*1000)
     ipc.main(timeout=timeout / 1000)
     total_time = time.monotonic_ns() // (1000*1000) - started_at 
     ctx.exit(int(total_time >= timeout))
 
+@main.command()
+@click.pass_context
+@click.option('--timeout', '-t', default=3000, help="Wait time for a window to appear (and match) in milliseconds.")
+@click.option('--configs', '-c', default='-', type=click.File('r'), help="A list of startup programs in json")
+@click.argument('program', nargs=-1)
+def config(ctx, timeout, configs, program):
+    """
+    Start a program and move it's created window to the desired i3 workspace.
+
+    \b
+    Exist status:
+        0    on success,
+        1    when no window has been found.
+    """
+    debug = ctx.obj['DEBUG']
+    program = ' '.join(program)
+    configs = yaml.load(configs, Loader=SafeLoader)
+
+    ipc = i3ipc.Connection()
+    ipc.on('window::new', window_new(configs, debug=debug))
+
+    for cfg in configs:
+        cfg['filter'] = parse(cfg['filter'])
+        ipc.command(f'exec {cfg["program"]}')
+    started_at = time.monotonic_ns() // (1000*1000)
+    ipc.main(timeout=timeout / 1000)
+    total_time = time.monotonic_ns() // (1000*1000) - started_at 
+    ctx.exit(int(total_time >= timeout))
 
 if __name__ == '__main__':
     main()

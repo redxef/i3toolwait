@@ -1,3 +1,4 @@
 click
 i3ipc
+pyyaml
 
