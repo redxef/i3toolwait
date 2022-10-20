@@ -167,6 +167,8 @@ def group_tokens(tokens: list[str]):
     return groups
 
 def build_expression(tokens: list[str]) -> Expression:
+    if tokens[0] == '(' and tokens[-1] == ')':
+        tokens = tokens[1:-1]
     token_groups = group_tokens(tokens)
 
     expressions = [build_expression(ts) for ts in token_groups[1:]] if len(token_groups) > 1 else []
@@ -283,6 +285,7 @@ def main(filter, debug, workspace, program):
 
     """
     filter = parse(filter)
+    program = ' '.join(program)
     ipc = i3ipc.Connection()
     ipc.on('window::new', window_new(filter, workspace=workspace, debug=debug))
     ipc.command(f'exec {program}')
