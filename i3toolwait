@@ -295,7 +295,7 @@ async def run(configs: list[dict], *, timeout: int, debug: bool):
     for cfg in configs:
         cfg['filter'] = parse(cfg['filter'])
         p = cfg['program']
-        if isinstance(p, collections.abc.Iterable):
+        if isinstance(p, collections.abc.Iterable) and not isinstance(p, str):
             p = ' '.join(p)
         coroutines += [ipc.command(f'exec {p}')]
     await asyncio.gather(*coroutines)
