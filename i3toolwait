@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 
+import collections.abc
 import asyncio
 import functools
 import json
@@ -280,7 +281,7 @@ def window_new(configs: list[dict], debug: bool):
             if filter.reduce(e.ipc_data):
                 container_id = e.ipc_data['container']['id']
                 await ipc.command(f'for_window [con_id="{container_id}"] focus')
-                await ipc.command(f'for_window [con_id="{container_id}"] move container to workspace {workspace}')
+                await ipc.command(f'move container to workspace {workspace}')
                 configs.pop(i)
             if not configs:
                 ipc.main_quit()
@@ -294,7 +295,7 @@ async def run(configs: list[dict], *, timeout: int, debug: bool):
     for cfg in configs:
         cfg['filter'] = parse(cfg['filter'])
         p = cfg['program']
-        if isinstance(p, list):
+        if isinstance(p, collections.abc.Iterable):
             p = ' '.join(p)
         coroutines += [ipc.command(f'exec {p}')]
     await asyncio.gather(*coroutines)
