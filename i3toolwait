@@ -4,6 +4,8 @@
 
 import collections.abc
 import asyncio
+import signal
+import os
 import functools
 import json
 
@@ -287,17 +289,33 @@ def window_new(configs: list[dict], debug: bool):
                 ipc.main_quit()
     return callback
 
+async def wait_signal(s):
+    event = asyncio.Event()
+    asyncio.get_running_loop().add_signal_handler(s, lambda: event.set())
+    await event.wait()
+    event.clear()
+    asyncio.get_running_loop().remove_signal_handler(s)
+
 async def run(configs: list[dict], *, timeout: int, debug: bool):
     ipc = await i3ipc.aio.Connection().connect()
     ipc.on('window::new', window_new(configs, debug=debug))
 
+    variables = {
+        'pid': os.getpid(),
+    }
     coroutines = []
     for cfg in configs:
         cfg['filter'] = parse(cfg['filter'])
         p = cfg['program']
         if isinstance(p, collections.abc.Iterable) and not isinstance(p, str):
             p = ' '.join(p)
-        coroutines += [ipc.command(f'exec {p}')]
+        p = p.format(**variables)
+        coro = ipc.command(f'exec {p}')
+        if cfg.get('signal_continue', False):
+            await coro
+            await wait_signal(signal.Signals(cfg.get('signal_continue')))
+        else:
+            coroutines += [coro]
     await asyncio.gather(*coroutines)
     try:
         await asyncio.wait_for(ipc.main(), timeout=timeout/1000)
