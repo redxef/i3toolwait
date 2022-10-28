@@ -20,6 +20,7 @@ Run multiple programs by specifying a yaml list of the form:
 - filter: <your filter>
   workspace: <target workspace>
   program: <program to execute>
+  signal_continue: <a signal number upon which to move on to the next program, optional>
 ```
 
 ## Installing
@@ -56,3 +57,32 @@ For example: `(> ".container.geometry.width" 300)` would match the first window 
 
 Multiple filters are combined via nesting: `(& (> ".container.geometry.width" 300) (= ".container.window_properties.class" "discord"))`.
 
+## Starting tray programs in a specific order
+
+To start tray programs in a specific order it is possible to specify the `signal_continue` parameter.
+Starting of programs will be halted until the program has received the corresponding signal.
+
+This could be combined with waybar to enforce an ordering of tray applications:
+
+`~/.config/waybar/config`
+```json
+"tray": {
+    "on-update": "pkill --full --signal SIGUSR1 i3toolwait",
+    "reverse-direction": true,
+}
+```
+
+`config-file`
+```yaml
+- program: 'nm-applet --indicator'
+  filter: '(False)'
+  workspace: -1
+  signal_continue: 10
+- program: 'blueman-applet'
+  filter: '(False)'
+  workspace: -1
+  signal_continue: 10
+- ...
+```
+
+This setup would order the icons in waybar from left-to-right like in the config file.
