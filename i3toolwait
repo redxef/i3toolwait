@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 
-import collections.abc
 import typing
 import asyncio
 import signal
@@ -380,6 +379,7 @@ class Config(pydantic.BaseModel):
     signal: typing.Optional[Signal] = None
     timeout: int = 3000
     programs: typing.List[ProgramConfig]
+    final_workspace: typing.Optional[str] = None
 
 class RuntimeData(pydantic.BaseModel):
     programs: typing.List[ProgramConfig] = []
@@ -455,6 +455,9 @@ async def run(config: Config, *, debug: bool):
             await asyncio.wait_for(runtime_data.ipc.main(), timeout=new_timeout/1000)
     except asyncio.TimeoutError:
         return 1
+    finally:
+        if config.final_workspace is not None:
+            await runtime_data.ipc.command(f'workspace {config.final_workspace}')
     return 0
 
 @click.group()
