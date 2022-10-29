@@ -1,4 +1,5 @@
 click
-i3ipc
+pydantic
 pyyaml
+i3ipc
 
