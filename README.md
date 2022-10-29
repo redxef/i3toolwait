@@ -23,6 +23,8 @@ Run multiple programs by specifying a yaml list of the form:
   signal_continue: <a signal number upon which to move on to the next program, optional>
 ```
 
+Not specifying a workspace implies that the program won't spawn a window.
+
 ## Installing
 
 Use the makefile: `INSTALL_BASE=/usr/local/ make install` or install all dependencies
@@ -76,11 +78,9 @@ This could be combined with waybar to enforce an ordering of tray applications:
 ```yaml
 - program: 'nm-applet --indicator'
   filter: '(False)'
-  workspace: -1
   signal_continue: 10
 - program: 'blueman-applet'
   filter: '(False)'
-  workspace: -1
   signal_continue: 10
 - ...
 ```
