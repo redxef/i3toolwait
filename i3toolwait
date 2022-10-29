@@ -272,7 +272,7 @@ def parse(s: str) -> Expression:
     tokens = tokenize(s)
     return build_expression(tokens)
 
-def window_new(configs: list[dict], debug: bool):
+def window_new(configs: list[dict], debug: bool, *, lock):
     async def callback(ipc: i3ipc.aio.Connection, e: i3ipc.WorkspaceEvent):
         assert e.change == 'new'
         if debug:
@@ -282,9 +282,11 @@ def window_new(configs: list[dict], debug: bool):
             workspace = cfg['workspace']
             if filter.reduce(e.ipc_data):
                 container_id = e.ipc_data['container']['id']
-                await ipc.command(f'for_window [con_id="{container_id}"] focus')
-                await ipc.command(f'move container to workspace {workspace}')
-                configs.pop(i)
+                async with lock:
+                    await ipc.command(f'for_window [con_id="{container_id}"] focus')
+                    await ipc.command(f'move container to workspace {workspace}')
+                    await asyncio.sleep(1)
+                    configs.pop(i)
             if not configs:
                 ipc.main_quit()
     return callback
@@ -295,11 +297,17 @@ async def wait_signal(s):
     await event.wait()
     event.clear()
     asyncio.get_running_loop().remove_signal_handler(s)
+    asyncio.get_running_loop().add_signal_handler(s, lambda: None)
+
+async def coro_wait_signal(coro, s):
+    await coro
+    await wait_signal(s)
 
 async def run(configs: list[dict], *, timeout: int, debug: bool):
     window_configs = [c for c in configs if c.get('workspace') is not None]
+    lock = asyncio.Lock()
     ipc = await i3ipc.aio.Connection().connect() # we only wait for configs which spawn a window
-    ipc.on('window::new', window_new(window_configs, debug=debug))
+    ipc.on('window::new', window_new(window_configs, debug=debug, lock=lock))
 
     variables = {
         'pid': os.getpid(),
@@ -313,10 +321,9 @@ async def run(configs: list[dict], *, timeout: int, debug: bool):
         p = p.format(**variables)
         coro = ipc.command(f'exec {p}')
         if cfg.get('signal_continue', False):
-            await coro
-            await wait_signal(signal.Signals(cfg.get('signal_continue')))
-        else:
-            coroutines += [coro]
+            sig = signal.Signals(cfg.get('signal_continue'))
+            coro = coro_wait_signal(coro, sig)
+        coroutines += [coro]
     await asyncio.gather(*coroutines)
     try:
         if window_configs:
