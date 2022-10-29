@@ -398,7 +398,6 @@ def window_new(runtime_data: RuntimeData, *, debug):
                     container_id = e.ipc_data['container']['id']
                     await ipc.command(f'for_window [con_id="{container_id}"] focus')
                     await ipc.command(f'move container to workspace {cfg.workspace}')
-                    await asyncio.sleep(1)
                     runtime_data.programs.pop(i)
                 if not runtime_data.programs:
                     ipc.main_quit()
