@@ -17,13 +17,19 @@ Run multiple programs by specifying a yaml list of the form:
 
 ```yaml
 ---
-- filter: <your filter>
-  workspace: <target workspace>
-  program: <program to execute>
-  signal_continue: <a signal number upon which to move on to the next program, optional>
+signal: signal number or name, optional. Should program entries which have signal: true wait for this signal before continuing to the next one.
+timeout: timeout in milliseconds
+programs:
+- match: a filter with which to match the window
+  workspace: string or null, the workspace to move windows to
+  cmd: string or list, the command to execute
+  signal: boolean, should we wait before continuing with the next entry
+  timeout: timeout in milliseconds, used only if signal: true - how long to wait for the signal
 ```
 
-Not specifying a workspace implies that the program won't spawn a window.
+The programs will be started asynchronously, except when `signal = true` which means that, before continuing
+to the next program we wait for a signal. I would start all programs, which do not wait for a signal first
+and then only the ones depending on the signal to reduce the startup delay.
 
 ## Installing
 
@@ -76,13 +82,26 @@ This could be combined with waybar to enforce an ordering of tray applications:
 
 `config-file`
 ```yaml
-- program: 'nm-applet --indicator'
-  filter: '(False)'
-  signal_continue: 10
-- program: 'blueman-applet'
-  filter: '(False)'
-  signal_continue: 10
+signal: SIGUSR1
+timeout: 2000
+programs:
+- cmd: 'nm-applet --indicator'
+  match: '(False)'
+  timeout: 1000
+  signal: true
+- cmd: 'blueman-applet'
+  match: '(False)'
+  timeout: 1000
+  signal: true
 - ...
 ```
 
 This setup would order the icons in waybar from left-to-right like in the config file.
+
+## Troubleshooting
+
+### My windows do not get rearranged
+
+It is very likely that the timeout is too short and the program exits before the window spawns.
+Alternatively your filter might just be wrong. To debug execute the script with the `--debug`
+flag to see if the window is recognized.
