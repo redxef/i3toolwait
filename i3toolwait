@@ -297,8 +297,9 @@ async def wait_signal(s):
     asyncio.get_running_loop().remove_signal_handler(s)
 
 async def run(configs: list[dict], *, timeout: int, debug: bool):
-    ipc = await i3ipc.aio.Connection().connect()
-    ipc.on('window::new', window_new(configs, debug=debug))
+    window_configs = [c for c in configs if c.get('workspace') is not None]
+    ipc = await i3ipc.aio.Connection().connect() # we only wait for configs which spawn a window
+    ipc.on('window::new', window_new(window_configs, debug=debug))
 
     variables = {
         'pid': os.getpid(),
@@ -318,7 +319,9 @@ async def run(configs: list[dict], *, timeout: int, debug: bool):
             coroutines += [coro]
     await asyncio.gather(*coroutines)
     try:
-        await asyncio.wait_for(ipc.main(), timeout=timeout/1000)
+        if window_configs:
+            # run main loop only if we wait for something
+            await asyncio.wait_for(ipc.main(), timeout=timeout/1000)
     except asyncio.TimeoutError:
         return 1
     return 0
@@ -334,7 +337,7 @@ def main(ctx, debug):
 @click.pass_context
 @click.option('--filter', '-f', default='True', help="A filter expression for the raw ipc dictionary.")
 @click.option('--timeout', '-t', default=3000, help="Wait time for a window to appear (and match) in milliseconds.")
-@click.option('--workspace', '-w', required=True, help="The workspace to move to.")
+@click.option('--workspace', '-w', default=None, help="The workspace to move to.")
 @click.argument('program', nargs=-1)
 def simple(ctx, filter, timeout, workspace, program):
     """
@@ -352,8 +355,8 @@ def simple(ctx, filter, timeout, workspace, program):
 @main.command()
 @click.pass_context
 @click.option('--timeout', '-t', default=3000, help="Wait time for a window to appear (and match) in milliseconds.")
-@click.option('--configs', '-c', default='-', type=click.File('r'), help="A list of startup programs in json")
-def config(ctx, timeout, configs):
+@click.argument('config', type=click.File('r'), default='-')
+def config(ctx, timeout, config):
     """
     Start a program and move it's created window to the desired i3 workspace.
 
@@ -363,8 +366,8 @@ def config(ctx, timeout, configs):
         1    when no window has been found.
     """
     debug = ctx.obj['DEBUG']
-    configs = yaml.load(configs, Loader=SafeLoader)
-    ctx.exit(asyncio.run(run(configs, timeout=timeout, debug=debug)))
+    config = yaml.load(config, Loader=SafeLoader)
+    ctx.exit(asyncio.run(run(config, timeout=timeout, debug=debug)))
 
 if __name__ == '__main__':
     main()
