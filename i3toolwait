@@ -6,6 +6,7 @@ import collections.abc
 import asyncio
 import signal
 import os
+import time
 import functools
 import json
 
@@ -313,9 +314,13 @@ async def run(configs: list[dict], *, timeout: int, debug: bool):
         'pid': os.getpid(),
     }
     coroutines = []
+    timeouts = [timeout]
+    started_at = time.monotonic_ns()
     for cfg in configs:
         cfg['filter'] = parse(cfg['filter'])
         p = cfg['program']
+        t = cfg.get('timeout', timeout)
+        timeouts += [t]
         if isinstance(p, collections.abc.Iterable) and not isinstance(p, str):
             p = ' '.join(p)
         p = p.format(**variables)
@@ -323,12 +328,19 @@ async def run(configs: list[dict], *, timeout: int, debug: bool):
         if cfg.get('signal_continue', False):
             sig = signal.Signals(cfg.get('signal_continue'))
             coro = coro_wait_signal(coro, sig)
-        coroutines += [coro]
+            try:
+                await asyncio.wait_for(coro, timeout=t/1000)
+            except asyncio.TimeoutError:
+                pass
+        else:
+            coroutines += [coro]
     await asyncio.gather(*coroutines)
     try:
         if window_configs:
             # run main loop only if we wait for something
-            await asyncio.wait_for(ipc.main(), timeout=timeout/1000)
+            diff = (time.monotonic_ns() - started_at) / (1000*1000)
+            new_timeout = max(max(*timeouts) - diff, 0)
+            await asyncio.wait_for(ipc.main(), timeout=new_timeout/1000)
     except asyncio.TimeoutError:
         return 1
     return 0
