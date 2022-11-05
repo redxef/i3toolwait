@@ -302,9 +302,9 @@ class Command(str):
 
     @classmethod
     def validate(cls, v):
-        if not isinstance(v, (str, list)):
+        if not isinstance(v, (str, list, tuple)):
             raise TypeError('Must be string or list')
-        if isinstance(v, list):
+        if isinstance(v, (list, tuple)):
             v = ' '.join([f"'{x}'" for x in v])
         return v
 
