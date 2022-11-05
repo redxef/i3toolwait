@@ -13,7 +13,7 @@ Run only one program.
 
 ### Config
 
-Run multiple programs by specifying a yaml list of the form:
+Run multiple programs by specifying a yaml configuration file:
 
 ```yaml
 ---
@@ -67,7 +67,7 @@ Multiple filters are combined via nesting: `(& (> ".container.geometry.width" 30
 
 ## Starting tray programs in a specific order
 
-To start tray programs in a specific order it is possible to specify the `signal_continue` parameter.
+To start tray programs in a specific order it is possible to specify the `signal` parameter.
 Starting of programs will be halted until the program has received the corresponding signal.
 
 This could be combined with waybar to enforce an ordering of tray applications:
