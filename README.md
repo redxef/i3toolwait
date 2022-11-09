@@ -51,19 +51,19 @@ It is then possible to construct a filter for any program.
 
 Available Operators:
 
-- and: `&`
-- or: `|`
-- eq: `=`
-- neq: `!=`
-- gt: `>`
-- lt: `<`
+- and: `&`: logical and, ungreedy
+- or: `|`: logical or, ungreedy
+- if: `?`: branch, if the first argument evaluates to `True` return the second, otherwise the third
+- eq: `=`: equality
+- neq: `!=`: inequality
+- gt: `>`: greater than
+- lt: `<`: less than
+- load: `load`: load a key from the provided input `(load ".container.app_id")`
+- has-key: `has-key`: check if a key is in the input: `(has-key ".container.app_id")`
 
-The filter usually operates on the dictionary, and thus the *first* argument to every normal filter
-is the dictionary element, in `.` notation, as might be customary in `jq`.
+For example: `(> (load ".container.geometry.width") 300)` would match the first window where the width is greater than 300.
 
-For example: `(> ".container.geometry.width" 300)` would match the first window where the width is greater than 300.
-
-Multiple filters are combined via nesting: `(& (> ".container.geometry.width" 300) (= ".container.window_properties.class" "discord"))`.
+Multiple filters are combined via nesting: `(& (> (load ".container.geometry.width") 300) (= (load ".container.window_properties.class") "discord"))`.
 
 ## Starting tray programs in a specific order
 

@@ -25,12 +25,19 @@ class Expression:
     def __init__(self):
         pass
     def reduce(self, ipc_data):
+        if self.should_call:
+            return self.call(ipc_data)
         return functools.reduce(self.reduce_function(ipc_data), self.children)
+    @property
+    def should_call(self):
+        return False
     @property
     def children(self):
         raise NotImplemented('TODO: implement in subclass')
     def reduce_function(self, ipc_data):
         raise NotImplemented('TODO: implement in subclass')
+    def call(self, ipc_data):
+        raise NotImplementedError('TODO: implement in subclass')
 
 class LiteralExpression(Expression):
     def __init__(self, value):
@@ -78,6 +85,26 @@ class OrExpression(Expression):
     def reduce_function(self, ipc_data):
         return lambda a, b: a.reduce(ipc_data) or b.reduce(ipc_data)
 
+class IfExpression(Expression):
+    def __init__(self, children, *args, **kwargs):
+        self._children = children
+        super().__init__(*args, **kwargs)
+    def __repr__(self) -> str:
+        cs = ' '.join([repr(c) for c in self.children])
+        return f'(? {cs})'
+    @property
+    def should_call(self):
+        return True
+    @property
+    def children(self):
+        return self._children
+    def call(self, ipc_data):
+        if self._children[0].reduce(ipc_data):
+            i = 1
+        else:
+            i = 2
+        return self._children[i].reduce(ipc_data)
+
 class EqExpression(Expression):
     def __init__(self, children, *args, **kwargs):
         self._children = children
@@ -89,11 +116,9 @@ class EqExpression(Expression):
     def children(self):
         return self._children
     def reduce_function(self, ipc_data):
-        def reduce(key, value):
-            ipc_value = ipc_data
-            for k in key.reduce(ipc_data).strip('.').split('.'):
-                ipc_value = ipc_value[k]
-            return ipc_value == value.reduce(ipc_data)
+        def reduce(v0, v1):
+            print(f'reducing: {repr(self)}')
+            return v0.reduce(ipc_data) == v1.reduce(ipc_data)
         return reduce
 
 class NeqExpression(Expression):
@@ -107,11 +132,8 @@ class NeqExpression(Expression):
     def children(self):
         return self._children
     def reduce_function(self, ipc_data):
-        def reduce(key, value):
-            ipc_value = ipc_data
-            for k in key.reduce(ipc_data).strip('.').split('.'):
-                ipc_value = ipc_value[k]
-            return ipc_value != value.reduce(ipc_data)
+        def reduce(v0, v1):
+            return v0.reduce(ipc_data) != v1.reduce(ipc_data)
         return reduce
 
 class GtExpression(Expression):
@@ -125,11 +147,8 @@ class GtExpression(Expression):
     def children(self):
         return self._children
     def reduce_function(self, ipc_data):
-        def reduce(key, value):
-            ipc_value = ipc_data
-            for k in key.reduce(ipc_data).strip('.').split('.'):
-                ipc_value = ipc_value[k]
-            return ipc_value > value.reduce(ipc_data)
+        def reduce(v0, v1):
+            return v0.reduce(ipc_data) > v1.reduce(ipc_data)
         return reduce
 
 class LtExpression(Expression):
@@ -143,20 +162,60 @@ class LtExpression(Expression):
     def children(self):
         return self._children
     def reduce_function(self, ipc_data):
-        def reduce(key, value):
-            ipc_value = ipc_data
-            for k in key.reduce(ipc_data).strip('.').split('.'):
-                ipc_value = ipc_value[k]
-            return ipc_value < value.reduce(ipc_data)
+        def reduce(v0, v1):
+            return v0.reduce(ipc_data) < v1.reduce(ipc_data)
         return reduce
+
+class LoadExpression(Expression):
+    def __init__(self, value, *args, **kwargs):
+        self._value = value
+        super().__init__(*args, **kwargs)
+    def __repr__(self) -> str:
+        return f'(load {self._value})'
+    @property
+    def should_call(self):
+        return True
+    @property
+    def children(self):
+        return [self._value]
+    def call(self, ipc_data):
+        ipc_value = ipc_data
+        for k in self._value[0].children[0].strip('.').split('.'):
+            ipc_value = ipc_value[k]
+        return ipc_value
+    
+class HasKeyExpression(Expression):
+    def __init__(self, value, *args, **kwargs):
+        self._value = value
+        super().__init__(*args, **kwargs)
+    def __repr__(self) -> str:
+        return f'(has-key {self._value})'
+    @property
+    def should_call(self):
+        return True
+    @property
+    def children(self):
+        return [self._value]
+    def call(self, ipc_data):
+        ipc_value = ipc_data
+        for k in self._value[0].children[0].strip('.').split('.'):
+            try:
+                ipc_value = ipc_value[k]
+            except KeyError:
+                return False
+        return True
+
 
 expression_mapping = {
     '&': AndExpression,
     '|': OrExpression,
+    '?': IfExpression,
     '=': EqExpression,
     '!=': NeqExpression,
     '>': GtExpression,
     '<': LtExpression,
+    'load': LoadExpression,
+    'has-key': HasKeyExpression,
 }
 
 def group_tokens(tokens: list[str]) -> list[list[str]]:
@@ -508,3 +567,4 @@ def config(ctx, config):
 
 if __name__ == '__main__':
     main()
+
