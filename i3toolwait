@@ -73,6 +73,8 @@ class Environment:
             '-': lambda _, a, b: a - b,
             '*': lambda _, *a: functools.reduce(lambda a, b: a * b, a),
             '/': lambda _, a, b: a // b,
+            '|': lambda _, *a: functools.reduce(lambda a, b: a or b, a),
+            '&': lambda _, *a: functools.reduce(lambda a, b: a and b, a),
         }
         self._lazy_functions = {
             '?': lazy_fc_if,
@@ -242,11 +244,11 @@ def token_extract_boolean(stream: str) -> tuple[Token, str]:
 
 def token_extract_keyword(stream: str) -> tuple[Token, str]:
     i = 0
-    if stream[i] in string.ascii_letters + '_-><=!+-*/?':
+    if stream[i] in string.ascii_letters + '_-><=!+-*/?&|':
         i += 1
     else:
         raise ValueError('No keyword in stream')
-    while stream[i] in string.ascii_letters + '_-><=!+-*/?':
+    while stream[i] in string.ascii_letters + '_-><=!+-*/?&|':
         i += 1
     return Token(Token.KEYWORD, stream[:i]), stream[i:]
 
