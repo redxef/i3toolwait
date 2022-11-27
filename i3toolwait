@@ -23,27 +23,37 @@ except ImportError:
     from yaml import SafeLoader
 
 
-def lazy_fc_if(env, a, b, c):
-    a.reduce(env)
+def lazy_fc_if(env, local, a, b, c):
+    a.reduce(env, local)
     if a.reduced:
-        b.reduce(env)
-        return b
-    c.reduce(env)
+        b.reduce(env, local)
+        return b.reduced
+    c.reduce(env, local)
+    return c.reduced
 
-def lazy_fc_nif(env, a, b, c):
-    a.reduce(env)
+def lazy_fc_nif(env, local, a, b, c):
+    a.reduce(env, local)
     if not a.reduced:
-        b.reduce(env)
-        return b
-    c.reduce(env)
+        b.reduce(env, local)
+        return b.reduced
+    c.reduce(env, local)
+    c.reduced
 
-def fc_load(env, path):
+def lazy_fc_defun(env, local, name, variables, func):
+    _ = local
+    # need ugly hack, because variables are actually a function with n-1 args
+    varnames = [variables._fc] + [v._value for v in variables._args]
+    env.set_lisp_function(name._value, varnames, func)
+
+def fc_load(env, local, path):
+    _ = local
     ipc_value = env.input
     for k in path.strip('.').split('.'):
         ipc_value = ipc_value[k]
     return ipc_value
 
-def fc_has_key(env, path):
+def fc_has_key(env, local, path):
+    _ = local
     ipc_value = env.input
     for k in path.strip('.').split('.'):
         try:
@@ -58,28 +68,31 @@ class Environment:
         self._input = input
         self._variables = {}
         self._functions = {
-            '__last__': lambda *a: a[-1], # special function, if multiple expressions, execute all and return result of last one
-            'defvar': lambda env, n, v: env.set_variable(n, v),
-            'write': lambda _, a: print(a),
+            '__last__': lambda _env, _local, *a: a[-1], # special function, if multiple expressions, execute all and return result of last one
+            'setq': lambda env, _, n, v: env.set_variable(n, v),
+            'let': lambda _, local, n, v: local.set_variable(n, v),
+            'write': lambda _env, _local, a: print(a),
             'load': fc_load,
             'has-key': fc_has_key,
-            '=': lambda _, a, b: a == b,
-            '!=': lambda _, a, b: a != b,
-            '>': lambda _, a, b: a > b,
-            '<': lambda _, a, b: a < b,
-            '>=': lambda _, a, b: a >= b,
-            '<=': lambda _, a, b: a <= b,
-            '+': lambda _, *a: sum(a),
-            '-': lambda _, a, b: a - b,
-            '*': lambda _, *a: functools.reduce(lambda a, b: a * b, a),
-            '/': lambda _, a, b: a // b,
-            '|': lambda _, *a: functools.reduce(lambda a, b: a or b, a),
-            '&': lambda _, *a: functools.reduce(lambda a, b: a and b, a),
+            '=': lambda _, _l, a, b: a == b,
+            '!=': lambda _, _l, a, b: a != b,
+            '>': lambda _, _l, a, b: a > b,
+            '<': lambda _, _l, a, b: a < b,
+            '>=': lambda _, _l, a, b: a >= b,
+            '<=': lambda _, _l, a, b: a <= b,
+            '+': lambda _, _l, *a: sum(a),
+            '-': lambda _, _l, a, b: a - b,
+            '*': lambda _, _l, *a: functools.reduce(lambda a, b: a * b, a),
+            '/': lambda _, _l, a, b: a // b,
+            '|': lambda _, _l, *a: functools.reduce(lambda a, b: a or b, a),
+            '&': lambda _, _l, *a: functools.reduce(lambda a, b: a and b, a),
         }
         self._lazy_functions = {
             '?': lazy_fc_if,
             '!?': lazy_fc_nif,
+            'defun': lazy_fc_defun,
         }
+        self._lisp_functions = {}
 
     @property
     def input(self):
@@ -97,6 +110,28 @@ class Environment:
     def get_lazy_function(self, name: str):
         return self._lazy_functions[name]
 
+    def set_lisp_function(self, name: str, vars: list[object], e: object):
+        self._lisp_functions[name] = vars, e
+
+    def get_lisp_function(self, name: str) -> tuple[list[str], object]:
+        return self._lisp_functions[name]
+
+class LocalEnvironment:
+
+    def __init__(self):
+        self._variables = {}
+
+    def copy(self) -> 'LocalEnvironment':
+        n = LocalEnvironment()
+        n._variables = self._variables.copy()
+        return n
+
+    def set_variable(self, name: str, value: object):
+        self._variables[name] = value
+
+    def get_variable(self, name: str):
+        return self._variables[name]
+
 class Expression:
 
     STATE_CONSTRUCTED = 0
@@ -106,14 +141,14 @@ class Expression:
         self._state = Expression.STATE_CONSTRUCTED 
         self._reduced = None
 
-    def _reduce(self, env: Environment, args: list[object]):
-        _ = env, args
+    def _reduce(self, env: Environment, local: LocalEnvironment, args: list[object]):
+        _ = env, local, args
         raise NotImplementedError('Implement in subclass')
 
-    def reduce(self, env: Environment):
+    def reduce(self, env: Environment, local: LocalEnvironment):
         if self._state == Expression.STATE_REDUCED:
             return
-        self._reduced = self._reduce(env, [])
+        self._reduced = self._reduce(env, local, [])
         self._state = Expression.STATE_REDUCED
     
     @property
@@ -131,8 +166,8 @@ class Constant(Expression):
     def __repr__(self):
         return repr(self._value)
 
-    def _reduce(self, env: Environment, args: list[Expression]):
-        _ = env, args
+    def _reduce(self, env: Environment, local: LocalEnvironment, args: list[Expression]):
+        _ = env, local, args
         return self._value
 
 class VariableSet(Constant):
@@ -140,9 +175,12 @@ class VariableSet(Constant):
 
 class VariableGet(Constant):
 
-    def _reduce(self, env: Environment, args: list[Expression]):
+    def _reduce(self, env: Environment, local: LocalEnvironment, args: list[Expression]):
         _ = args
-        return env.get_variable(self._value)
+        try:
+            return local.get_variable(self._value)
+        except KeyError:
+            return env.get_variable(self._value)
 
 class Function(Expression):
 
@@ -154,20 +192,30 @@ class Function(Expression):
     def __repr__(self):
         return f'({self._fc} {self._args})'
 
-    def _reduce(self, env: Environment, args: list[Expression]):
+    def _reduce(self, env: Environment, local: LocalEnvironment, args: list[Expression]):
         try:
-            fc = env.get_function(self._fc)
-            [a.reduce(env) for a in args]
-            r = fc(env, *[a.reduced for a in args])
+            argnames, fc = env.get_lisp_function(self._fc)
+            assert isinstance(fc, Expression)
+            l = local.copy()
+            for an, av in zip(argnames, args):
+                av.reduce(env, l)
+                l.set_variable(an, av.reduced)
+            fc.reduce(env, l)
+            r = fc.reduced
         except KeyError as e:
-            fc = env.get_lazy_function(self._fc)
-            r = fc(env, *args)
+            try:
+                fc = env.get_function(self._fc)
+                [a.reduce(env, local) for a in args]
+                r = fc(env, local, *[a.reduced for a in args])
+            except KeyError:
+                fc = env.get_lazy_function(self._fc)
+                r = fc(env, local, *args)
         return r
 
-    def reduce(self, env: Environment):
+    def reduce(self, env: Environment, local: LocalEnvironment):
         if self._state == Expression.STATE_REDUCED:
             return
-        self._reduced = self._reduce(env, self._args)
+        self._reduced = self._reduce(env, local, self._args)
         self._state = Expression.STATE_REDUCED
 
 class Token:
@@ -530,7 +578,7 @@ def window_new(runtime_data: RuntimeData, *, debug):
             print(json.dumps(e.ipc_data))
         async with runtime_data.lock:
             for i, cfg in enumerate(runtime_data.programs):
-                cfg.match.reduce(Environment(e.ipc_data))
+                cfg.match.reduce(Environment(e.ipc_data), LocalEnvironment())
                 if cfg.match.reduced:
                     container_id = e.ipc_data['container']['id']
                     await ipc.command(f'for_window [con_id="{container_id}"] focus')
