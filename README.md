@@ -19,6 +19,7 @@ Run multiple programs by specifying a yaml configuration file:
 ---
 signal: signal number or name, optional. Should program entries which have signal: true wait for this signal before continuing to the next one.
 timeout: timeout in milliseconds
+init: a lisp program, optional. Used to initialize the environment, useful to define custom functions which should be available everywhere.
 programs:
 - match: a filter with which to match the window
   workspace: string or null, the workspace to move windows to
@@ -87,6 +88,12 @@ This could be combined with waybar to enforce an ordering of tray applications:
 ```yaml
 signal: SIGUSR1
 timeout: 2000
+init: |
+  (
+    (setq i3_path ".container.window_properties.class")
+    (setq sway_path ".container.app_id")
+    (defun "idmatch" (name) (= (? (has-key sway_path) (load sway_path) (load i3_path)) name))
+  )
 programs:
 - cmd: 'nm-applet --indicator'
   match: '(False)'

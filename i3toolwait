@@ -164,6 +164,8 @@ class Constant(Expression):
         self._value = value
 
     def __repr__(self):
+        if isinstance(self._value, str):
+            return f'"{self._value}"'
         return repr(self._value)
 
     def _reduce(self, env: Environment, local: LocalEnvironment, args: list[Expression]):
@@ -171,9 +173,14 @@ class Constant(Expression):
         return self._value
 
 class VariableSet(Constant):
-    pass
+ 
+    def __repr__(self):
+        return self._value
 
 class VariableGet(Constant):
+
+    def __repr__(self):
+        return self._value
 
     def _reduce(self, env: Environment, local: LocalEnvironment, args: list[Expression]):
         _ = args
@@ -190,7 +197,8 @@ class Function(Expression):
         self._args = args
 
     def __repr__(self):
-        return f'({self._fc} {self._args})'
+        a = ' '.join([repr(a) for a in self._args])
+        return f'({self._fc} {a})'
 
     def _reduce(self, env: Environment, local: LocalEnvironment, args: list[Expression]):
         try:
@@ -296,7 +304,7 @@ def token_extract_keyword(stream: str) -> tuple[Token, str]:
         i += 1
     else:
         raise ValueError('No keyword in stream')
-    while stream[i] in string.ascii_letters + '_-><=!+-*/?&|':
+    while stream[i] in string.ascii_letters + string.digits + '_-><=!+-*/?&|':
         i += 1
     return Token(Token.KEYWORD, stream[:i]), stream[i:]
 
@@ -312,8 +320,11 @@ def token_extract_grouping_close(stream: str) -> tuple[Token, str]:
 
 def token_extract_space(stream: str) -> tuple[Token, str]:
     i = 0
-    while stream[i] in string.whitespace:
-        i += 1
+    try:
+        while stream[i] in string.whitespace:
+            i += 1
+    except IndexError:
+        pass
     return Token(Token.WHITESPACE, stream[:i]), stream[i:]
 
 def tokenize(program: str) -> list[Token]:
@@ -351,7 +362,7 @@ def tokenize_sanitize_function(token_before: Token | None, token: Token, token_a
 def tokenize_sanitize_setvar(token_before: Token | None, token: Token, token_after: Token | None) -> Token | None:
     if token_before is None: 
         return
-    if (token_before.t == Token.FUNCTION and token_before.v == 'defvar') and token.t == Token.KEYWORD:
+    if (token_before.t == Token.FUNCTION and token_before.v in ('setq', 'let')) and token.t == Token.KEYWORD:
         return Token(Token.VARIABLE_SET, token.v)
 
 def tokenize_sanitize_getvar(token_before: Token | None, token: Token, token_after: Token | None) -> Token | None:
@@ -359,7 +370,7 @@ def tokenize_sanitize_getvar(token_before: Token | None, token: Token, token_aft
         if token.t == Token.KEYWORD: 
             return Token(Token.VARIABLE_GET, token.v)
         return
-    if (token_before.t != Token.FUNCTION or token_before.v != 'defvar') and token.t == Token.KEYWORD:
+    if (token_before.t != Token.FUNCTION or token_before.v not in ('setq', 'let')) and token.t == Token.KEYWORD:
         return Token(Token.VARIABLE_GET, token.v)
 
 def _tokenize_sanitize(tokens: list[Token]) -> tuple[bool, list[Token]]:
@@ -562,10 +573,12 @@ class ProgramConfig(pydantic.BaseModel):
 class Config(pydantic.BaseModel):
     signal: typing.Optional[Signal] = None
     timeout: int = 3000
+    init: typing.Optional[Filter] = None
     programs: typing.List[ProgramConfig]
     final_workspace: typing.Optional[str] = None
 
 class RuntimeData(pydantic.BaseModel):
+    init: typing.Optional[Filter]
     programs: typing.List[ProgramConfig] = []
     lock: Lock
     event: Event
@@ -578,7 +591,13 @@ def window_new(runtime_data: RuntimeData, *, debug):
             print(json.dumps(e.ipc_data))
         async with runtime_data.lock:
             for i, cfg in enumerate(runtime_data.programs):
-                cfg.match.reduce(Environment(e.ipc_data), LocalEnvironment())
+                env = Environment(e.ipc_data)
+                local = LocalEnvironment()
+                if runtime_data.init is not None:
+                    runtime_data.init.reduce(env, local)
+                cfg.match.reduce(env, local)
+                if debug:
+                    print(cfg.match.reduced)
                 if cfg.match.reduced:
                     container_id = e.ipc_data['container']['id']
                     await ipc.command(f'for_window [con_id="{container_id}"] focus')
@@ -598,6 +617,7 @@ async def coro_wait_signal(coro, rt: RuntimeData):
 
 async def init(config: Config, *, debug: bool) -> RuntimeData:
     rd = RuntimeData(
+        init=str(config.init),
         programs=[p for p in config.programs if p.workspace is not None],
         lock=Lock(),
         event=Event(),
