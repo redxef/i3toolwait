@@ -146,8 +146,6 @@ class Expression:
         raise NotImplementedError('Implement in subclass')
 
     def reduce(self, env: Environment, local: LocalEnvironment):
-        if self._state == Expression.STATE_REDUCED:
-            return
         self._reduced = self._reduce(env, local, [])
         self._state = Expression.STATE_REDUCED
     
@@ -221,8 +219,6 @@ class Function(Expression):
         return r
 
     def reduce(self, env: Environment, local: LocalEnvironment):
-        if self._state == Expression.STATE_REDUCED:
-            return
         self._reduced = self._reduce(env, local, self._args)
         self._state = Expression.STATE_REDUCED
 
@@ -590,14 +586,14 @@ def window_new(runtime_data: RuntimeData, *, debug):
         if debug:
             print(json.dumps(e.ipc_data))
         async with runtime_data.lock:
+            env = Environment(e.ipc_data)
+            local = LocalEnvironment()
+            if runtime_data.init is not None:
+                parse(runtime_data.init).reduce(env, local)
             for i, cfg in enumerate(runtime_data.programs):
-                env = Environment(e.ipc_data)
-                local = LocalEnvironment()
-                if runtime_data.init is not None:
-                    parse(runtime_data.init).reduce(env, local)
                 cfg.match.reduce(env, local)
                 if debug:
-                    print(cfg.match.reduced)
+                    print(i, cfg.match, cfg.match.reduced)
                 if cfg.match.reduced:
                     container_id = e.ipc_data['container']['id']
                     await ipc.command(f'for_window [con_id="{container_id}"] focus')
