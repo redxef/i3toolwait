@@ -578,7 +578,7 @@ class Config(pydantic.BaseModel):
     final_workspace: typing.Optional[str] = None
 
 class RuntimeData(pydantic.BaseModel):
-    init: typing.Optional[Filter]
+    init: typing.Optional[str]
     programs: typing.List[ProgramConfig] = []
     lock: Lock
     event: Event
@@ -594,7 +594,7 @@ def window_new(runtime_data: RuntimeData, *, debug):
                 env = Environment(e.ipc_data)
                 local = LocalEnvironment()
                 if runtime_data.init is not None:
-                    runtime_data.init.reduce(env, local)
+                    parse(runtime_data.init).reduce(env, local)
                 cfg.match.reduce(env, local)
                 if debug:
                     print(cfg.match.reduced)
