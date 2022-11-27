@@ -60,6 +60,9 @@ Available Operators:
 - lt: `<`: less than
 - load: `load`: load a key from the provided input `(load ".container.app_id")`
 - has-key: `has-key`: check if a key is in the input: `(has-key ".container.app_id")`
+- let: `let`: assign a local variable: `(let x 10)`
+- setq: `setq`: assign a global variable: `(setq x 11)`
+- defun: `defun`: user-defined functions: `((defun greet (a) (write (+ "Hello " a "!"))) (greet "Alice"))`
 
 For example: `(> (load ".container.geometry.width") 300)` would match the first window where the width is greater than 300.
 

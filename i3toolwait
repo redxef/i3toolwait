@@ -80,7 +80,7 @@ class Environment:
             '<': lambda _, _l, a, b: a < b,
             '>=': lambda _, _l, a, b: a >= b,
             '<=': lambda _, _l, a, b: a <= b,
-            '+': lambda _, _l, *a: sum(a),
+            '+': lambda _, _l, *a: functools.reduce(lambda a, b: a + b, a),
             '-': lambda _, _l, a, b: a - b,
             '*': lambda _, _l, *a: functools.reduce(lambda a, b: a * b, a),
             '/': lambda _, _l, a, b: a // b,
