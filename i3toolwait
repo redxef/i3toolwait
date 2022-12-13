@@ -574,7 +574,7 @@ class Config(pydantic.BaseModel):
     init: typing.Optional[Filter] = None
     programs: typing.List[ProgramConfig]
     final_workspace: typing.Optional[str] = None
-    final_workspace_delay: int = 1000
+    final_workspace_delay: int = 100
 
 class RuntimeData(pydantic.BaseModel):
     init: typing.Optional[str]
