@@ -10,6 +10,7 @@ import os
 import time
 import functools
 import json
+import logging
 
 import yaml
 import click
@@ -22,6 +23,7 @@ try:
 except ImportError:
     from yaml import SafeLoader
 
+LOGGER = logging.getLogger('i3toolwait' if __name__ == '__main__' else __name__)
 
 def lazy_fc_if(env, local, a, b, c):
     a.reduce(env, local)
@@ -572,6 +574,7 @@ class Config(pydantic.BaseModel):
     init: typing.Optional[Filter] = None
     programs: typing.List[ProgramConfig]
     final_workspace: typing.Optional[str] = None
+    final_workspace_delay: int = 1000
 
 class RuntimeData(pydantic.BaseModel):
     init: typing.Optional[str]
@@ -583,8 +586,7 @@ class RuntimeData(pydantic.BaseModel):
 def window_new(runtime_data: RuntimeData, *, debug):
     async def callback(ipc: i3ipc.aio.Connection, e: i3ipc.WorkspaceEvent):
         assert e.change == 'new'
-        if debug:
-            print(json.dumps(e.ipc_data))
+        LOGGER.debug('New window: %s', json.dumps(e.ipc_data))
         async with runtime_data.lock:
             env = Environment(e.ipc_data)
             local = LocalEnvironment()
@@ -592,8 +594,7 @@ def window_new(runtime_data: RuntimeData, *, debug):
                 parse(runtime_data.init).reduce(env, local)
             for i, cfg in enumerate(runtime_data.programs):
                 cfg.match.reduce(env, local)
-                if debug:
-                    print(i, cfg.match, cfg.match.reduced)
+                LOGGER.debug('Tried to match %s, result: %s', cfg.match, cfg.match.reduced)
                 if cfg.match.reduced:
                     container_id = e.ipc_data['container']['id']
                     await ipc.command(f'for_window [con_id="{container_id}"] focus')
@@ -619,6 +620,11 @@ async def init(config: Config, *, debug: bool) -> RuntimeData:
         event=Event(),
         ipc=Connection(),
     )
+    logging.basicConfig(level=logging.WARNING)
+    if debug:
+        LOGGER.setLevel(logging.DEBUG)
+    else:
+        LOGGER.setLevel(logging.INFO)
     if config.signal is not None:
         asyncio.get_running_loop().add_signal_handler(config.signal, lambda: rd.event.set())
     return rd
@@ -626,7 +632,8 @@ async def init(config: Config, *, debug: bool) -> RuntimeData:
 async def run(config: Config, *, debug: bool):
     runtime_data = await init(config, debug=debug)
     await runtime_data.ipc.connect()
-    runtime_data.ipc.on('window::new', window_new(runtime_data, debug=debug))
+    handler = window_new(runtime_data, debug=debug)
+    runtime_data.ipc.on('window::new', handler)
 
     variables = {
         'pid': os.getpid(),
@@ -655,9 +662,14 @@ async def run(config: Config, *, debug: bool):
             new_timeout = max(timeout - diff, 0)
             await asyncio.wait_for(runtime_data.ipc.main(), timeout=new_timeout/1000)
     except asyncio.TimeoutError:
+        runtime_data.ipc.off(handler)
+        if runtime_data.programs:
+            LOGGER.debug('Not all programs consumed: %s', runtime_data.programs)
+            LOGGER.debug('Maybe the timeouts are too short?')
         return 1
     finally:
         if config.final_workspace is not None:
+            await asyncio.sleep(config.final_workspace_delay/1000)
             await runtime_data.ipc.command(f'workspace {config.final_workspace}')
     return 0
 
