@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use rust_lisp::model::Value as RValue;
 
@@ -18,6 +19,18 @@ impl Into<Vec<RValue>> for Value {
     }
 }
 
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let mut s = String::new();
+        s.push_str("(begin\n");
+        for i in &self.0 {
+            s.push_str(&format!("{}\n", i));
+        }
+        s.push_str(")");
+        write!(f, "{}", &s)
+    }
+}
+
 impl<'de> Deserialize<'de> for Value {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -28,7 +41,6 @@ impl<'de> Deserialize<'de> for Value {
         Ok(Value(r))
     }
 }
-
 
 #[derive(Clone, Debug)]
 #[derive(Deserialize)]
