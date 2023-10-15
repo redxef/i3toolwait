@@ -1,10 +1,11 @@
-use anyhow::Result;
-use futures::future::BoxFuture;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::Arc;
+
+
+use anyhow::Result;
+
+use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufStream};
 use tokio::net::UnixStream;
 
@@ -192,9 +193,18 @@ impl<'a> Connection<'a> {
         (*cb.unwrap())(*subscription, response).await
     }
 
-    pub async fn run(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn run(
+        &mut self,
+        rx: &mut tokio::sync::broadcast::Receiver<()>,
+    ) -> Result<(), anyhow::Error> {
         loop {
-            let (message_type, response) = self.receive_message().await?;
+            let stop_task = rx.recv();
+            let receive_message_task = self.receive_message();
+            let result = tokio::select! {
+                _ = stop_task => {return Ok(())},
+                result = receive_message_task => result?,
+            };
+            let (message_type, response) = result;
             if !message_type.is_subscription() {
                 continue;
             }

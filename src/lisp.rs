@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use rust_lisp::model::{IntType, FloatType, Value, List, Env, reference, reference::Reference};
 
-
+use rust_lisp::model::{reference, reference::Reference, Env, FloatType, IntType, List, Value};
 
 fn serde_lisp_value(value: &serde_json::Value) -> Value {
     match value {
