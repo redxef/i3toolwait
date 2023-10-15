@@ -84,10 +84,10 @@ pub struct Config {
     pub timeout: u64,
     #[serde(default = "Config::default_init")]
     pub init: Value,
-    #[serde(default = "Config::default_programs")]
-    pub programs: Vec<ProgramEntry>,
     #[serde(default)]
     pub cmd: Option<String>,
+    #[serde(default = "Config::default_programs")]
+    pub programs: Vec<ProgramEntry>,
 }
 // Config is only unsafe because Value has dyn Any in it (via Foreign).
 // if we don't use !Send in Foreign everything is fine.
