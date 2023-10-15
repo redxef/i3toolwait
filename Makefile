@@ -1,9 +1,17 @@
+EXEC := i3toolwait
 INSTALL_BASE ?= /usr/local
 
-install: i3toolwait install-modules
-	install -Dm0755 -oroot -groot $< ${INSTALL_BASE}/bin/$<
+default: target/debug/${EXEC}
+release: target/release/${EXEC}
+default: target/debug/${EXEC}
 
-install-modules: requirements.txt
-	python3 -mpip install --upgrade --requirement $<
+install: target/release/${EXEC}
+	install -Dm0755 -oroot -groot $< ${INSTALL_BASE}/bin/${EXEC}
 
-.PHONY: install install-modules
+target/release/${EXEC}:
+	@cargo build --release
+
+target/debug/${EXEC}:
+	@cargo build
+
+.PHONY: install

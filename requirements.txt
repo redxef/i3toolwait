@@ -1,5 +1,0 @@
-click
-pydantic
-pyyaml
-i3ipc
-
