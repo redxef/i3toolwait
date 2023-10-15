@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use log::{debug, info, warn};
 use tokio::io::AsyncReadExt;
@@ -167,7 +167,9 @@ async fn main() -> Result<()> {
         tokio::io::stdin().read_to_string(&mut config).await?;
     } else {
         tokio::fs::File::open(args.config.as_ref().unwrap())
-            .await?
+            .await.with_context(
+                || format!("Failed to read config file {}", args.config.as_ref().unwrap().to_string_lossy())
+            )?
             .read_to_string(&mut config)
             .await?;
     }
